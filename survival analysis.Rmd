@@ -1,20 +1,30 @@
 ---
-title: "ISLR Survival Analysis"
+title: "Brain Cancer Survival Analysis"
 author: "Alec Becker"
 date: "11/24/2021"
-output: html_document
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
 ---
+
+### Introduction
+
+This analysis uses the `BrainCancer` dataset from the `ISLR2` R package to perform survival analysis. The outcome of interest is survival time after receiving a brain cancer diagnosis.
+
+*Note: The ISLR2 package is available on CRAN: https://CRAN.R-project.org/package=ISLR2*
 
 ### Set up and data import
 
-First, we load the libraries and data that will be called in this script
+First, we load the libraries and data that will be used in this script. We also set aside a roughly 10% random sample of the dataset to use for testing the predictive accuracy of the Cox proportional-hazards model we will build toward the end of the analysis.
 
 ```{r settings, include = FALSE}
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 ```
 
 ```{r libs}
-# Libraries
+# Load libraries
 library(ISLR2)
 library(tidyverse)
 library(GGally)
@@ -24,93 +34,148 @@ library(survminer)
 # Call and rename dataset from ISLR2 package
 data(BrainCancer)
 df <- BrainCancer
+
+# Select an approximate 10% sample for the hold-out testing set
+set.seed(42)
+test_rows <- sample(nrow(df), round((nrow(df) * 10) / 100))
+
+train <- df[-test_rows,]
+test <- df[test_rows,]
 ```
 
 
-### Exploratory Data Analysis
+### Exploratory data analysis
 
-Then, we explore the data's structure using the `str` function and summary statistics with the `summary` function.
+Then, we explore the training data's structure using the `str` function and summary statistics with the `summary` function. We see it contains 8 variables and 79 observations.
 
 ```{r eda1}
-str(df)
-summary(df)
+# Dataset structure
+str(train)
+
+# Variable summary statistics
+summary(train)
 ```
 
-For another look, we examine the first five observations of the data using the `head` function.
+For another look, we examine the first six observations of the training data using the `head` function.
 
 ```{r eda2}
-head(df)
+# Show first six rows of data
+head(train)
 ```
 
-To explore how survival probability changes as a function of observation time in the full sample, we fit a Kaplan-Meier curve. This method accounts for the censoring present in our data (indicated by `status` = 0).
+To explore how survival probability changes as a function of observation time in the training data, we fit a Kaplan-Meier curve. This method accounts for the censoring present in the data (indicated by `status` = 0). An observation is said to be censored if the participant either dropped out before the study period ended or did not have the event -- in this case, death -- by the time the study ended. Censored data require special handling because it is not known whether censored observations had the event of interest.
 
 ```{r km1}
-df$status <- as.integer(df$status)
-surv_fit1 <- survival::survfit(survival::Surv(time, status) ~ 1, data = df)
-survminer::ggsurvplot(surv_fit1, data = df, surv.median.line = "h", risk.table = TRUE, ggtheme = theme_bw())
+# Fit and plot a Kaplan-Meier curve for the full training sample
+surv_fit1 <- survival::survfit(survival::Surv(time, status) ~ 1, data = train)
+survminer::ggsurvplot(surv_fit1, data = train, surv.median.line = "h", risk.table = TRUE, ggtheme = theme_bw())
 
 ```
 
-The above plot shows the full sample's median survival, or the timepoint at which survival probability reaches 50%, at a bit under 50 years of age. From there, there are only marginal decreases in survival probability with increasing age.
+The above plot shows the training sample's median survival, or the timepoint at which survival probability reaches 50%, at a bit under 50 months of observation time. From there, survival probability marginally decreases and then plateaus at longer observation times.
 
-While interesting, exploring how the explanatory variables in our dataset may differentially impact survival probability would be more informative. To do that, we fit a Kaplan-Meier curve for each of the categorical variables in our dataset (i.e., `sex`, `diagnosis`, `loc`, and `stereo`.) We will fit plots for the continuous variables in a later step. 
+While interesting, exploring how the explanatory variables in our dataset may differentially impact survival probability would be more informative. To do that, we fit a Kaplan-Meier curve for each of the categorical predictors (i.e., `sex`, `diagnosis`, `loc`, and `stereo`.) We will fit plots for the continuous variables in a later step. 
 
 
 ```{r km2, fig.width = 12, fig.height = 12}
-
+# Define a vector of the factor variables in the dataset
 cat_vars <- c("sex", "diagnosis", "loc", "stereo")
 
+# Create a list of Kaplan-Meier plots for each factor variable
 surv_plots <- lapply(cat_vars, function(x) {
   formula <- as.formula(paste0("survival::Surv(time, status) ~ ", x))
-  surv_fit <- survminer::surv_fit(formula, data = df)
-  survplot <- ggsurvplot(surv_fit, data = df, pval = TRUE, surv.median.line = "h", risk.table = TRUE, ggtheme = theme_bw()) +
+  surv_fit <- survminer::surv_fit(formula, data = train)
+  survplot <- ggsurvplot(surv_fit, data = train, pval = TRUE, surv.median.line = "h", risk.table = TRUE, ggtheme = theme_bw()) +
                guides(color = guide_legend(nrow = 2))
 })
 
+# Arrange the Kaplan-Meier plots on a 2 x 2 grid
 survminer::arrange_ggsurvplots(surv_plots, ncol = 2, nrow = 2)
 
 ```
 
 
-From the plots above, we see that `diagnosis` (type of brain cancer diagnoses) and `stereo` (location of brain cancer) had the most substantial impact. Among the types of diagnoses in this dataset, HG glioma was the most lethal. Of the two stereotactic radiation therapies, receiving SRT (i.e., stereotactic radiotherapy) was related to shorter survival time.
+From the plots above, we see that `diagnosis` (type of brain cancer diagnoses) and `stereo` (type of stereotactic radiation received) had the most significant relationships with survival time. Among the types of diagnoses in this dataset, HG glioma was the most lethal. Of the two stereotactic radiation types, receiving SRT (i.e., stereotactic radiotherapy) was related to shorter survival time.
 
 Based on visual inspection, `sex` and `loc` (location of brain cancer) may impact risk of death. However, the p-values for both were greater than 0.05. This means we cannot reject the null hypothesis and we we cannot say with at least 95% confidence that either variable likely has a true relationship with survival time. These failures to reject the null hypothesis could be a function of lack of statistical power driven by small sample size. It is possible that, given a larger dataset drawn from the same population and context, we would have observed statistically significant relationships for these variables.
 
-We now turn to the two continuous variables in the data -- `ki` (Karnofsky index) and `gtv` (Gross Tumor Volume, in cubic centimeters), fitting a scatter plots over observation time among those that died. Including only those that died will allow us to remove the effect of censoring.
+We now turn to the two continuous variables in the data -- `ki` (Karnofsky index) and `gtv` (gross tumor volume, in cubic centimeters). For those that died, we create scatter plots with observation time on the y axes. Including only those that died will allow us to remove censoring as an issue.
 
-```{r cont_plots, fig.width = 10, fig.height = 5}
-ki_plot <- ggplot(df[df$status == 1,], aes(x = time, y = ki)) +
+```{r cont_plots, fig.width = 8, fig.height = 4}
+
+# Scatter plot of survival time over ki values
+ki_plot <- ggplot(train[train$status == 1,], aes(x = ki, y = time)) +
   geom_point() +
   theme_bw() +
   labs(
-    title = "Karnofsky index (ki) vs.\nObservation Time (time)"
-  )
+    title = "Karnofsky index (ki) vs.\nSurvival Time (time)"
+  ) +
+  geom_smooth(method = 'lm', se = FALSE)
 
-gtv_plot <- ggplot(df[df$status == 1,], aes(x = time, y = gtv)) +
+
+# Scatter plot of survival time over gtv values
+gtv_plot <- ggplot(train[train$status == 1,], aes(x = gtv, y = time)) +
   geom_point() +
   theme_bw() +
   labs(
-    title = "Gross Tumor Volume in cm^3 (gtv) vs.\nObservation Time (time)"
-  )
+    title = "Gross Tumor Volume in cm^3 (gtv) vs.\nSurvival Time (time)"
+  ) +
+  geom_smooth(method = 'lm', se = FALSE)
 
 gridExtra::grid.arrange(grobs = list(ki_plot, gtv_plot), nrow = 1, ncol = 2)
 
 ```
 
+The above charts suggest that survival time tended to be somewhat *higher* for higher Karnofsky index values, and tended to be somewhat *lower* for higher gross tumor volumes.
 
-We will now build a Cox regression to model survival time as a function of our explanatory variables. This will allow us to obtain hazard ratios that will shed light on the strength and direction of impact that each variable has on survival time. If the model is accurate and well-specified, we may be able to use it as a tool to generate survival time predictions.
+### Model building
 
-### Modelling
+We will now build a Cox regression to model hazard of death as a function of our explanatory variables. This will allow us to obtain hazard ratios that will shed light on the strength and direction of association that each variable has with survival. In a later step, we will assess the accuracy of the model on the test set.
+
 
 ```{r model}
-model1 <- survival::coxph(survival::Surv(time, status) ~ ., data = df)
-summary1 <- summary(model1)
-table1 <- broom::tidy(model1, conf.int = TRUE, exponentiate = TRUE)[c("term", "estimate", "conf.low", "conf.high")] %>% 
-            mutate_if(is.numeric, round, 2)
+# Fit Cox model
+model <- survival::coxph(survival::Surv(time, status) ~ ., data = train)
 
-table1
+# Examine model summary
+summary1 <- summary(model)
+
+# Produce a tidy table of the model results using the broom package
+table <- broom::tidy(model, conf.int = TRUE, exponentiate = TRUE)[c("term", "estimate", "conf.low", "conf.high", "p.value")] %>% 
+            mutate_if(is.numeric, function(x) format(round(x, 2), nsmall = 2))
+
+# Beautify the table of model results
+knitr::kable(table, col.names = c("Indicator", "HR", "HR (Low)", "HR (High)", "p-value")) %>% 
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  kableExtra::row_spec(row = c(2, 3, 6, 7), bold = TRUE)
 
 ```
 
+The model results show that, all other variables in the model held equal:
 
+- Having an **LG glioma** diagnosis was associated with about **5 times greater instantaneous risk of death** in comparison with a diagnosis a Meningioma.
+- Having an **HG glioma** diagnosis was associated with about **16 times greater instantaneous risk of death** in comparison with a diagnosis a Meningioma. 
+- Each one-unit increase in **Karnofsky index values** was associated with a **5% reduction in the instantaneous risk of death**.
+- Each one-unit increase in **gross tumor volume** was associated with a **6% increase in the instantaneous risk of death**.
 
+*Note: "instantaneous risk of death" refers to the risk of death at any given instant (i.e., timepoint). This is also referred to as the hazard of death.*
+
+### Model evaluation
+
+Next, we will assess the predictive accuracy of our model via [Harell's concordance index](https://cran.r-project.org/web/packages/survival/vignettes/concordance.pdf). 
+
+```{r}
+# Calculate concordance of the Cox model (fitted with the training data)
+survival::concordance(model)
+
+# Calculate concordance of the Cox model using the test data to assess model generalizability
+survival::concordance(model, newdata = test)
+```
+
+These results are not impressive. The concordance value can be interpreted as such: the Cox model can predict with about 47% accuracy which participant will die first, given two random observations from the test set. This means our model, while useful for inference, would be inappropriate for predictions with new, unseen data. To improve the predictive accuracy of the model, more complex methods with lower bias could be used. As well, the model would almost certainly be improved with more training data and the inclusion of any additional explanatory variables that are related to risk of death over time.
+
+### Conclusion
+
+This analysis shed light on factors that may be related to risk of death over time after a brain cancer diagnosis. Specifically, diagnoses of LG and HG glioma, as well as having tumors with larger gross volume, may increase risk of death over time. In contrast, higher values on the Karnofsky index may reduce risk of death over time. 
+
+While the datasets used for training and testing were both small, the Cox proportional-hazards model that was developed did not generalize well to the testing set. Future analyses should seek to improve model fit through the use of larger training datasets, additional relevant variables, and potentially more complex models with lower bias.

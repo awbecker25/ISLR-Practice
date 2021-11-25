@@ -80,7 +80,6 @@ To explore how survival probability changes as a function of observation time in
 # Fit and plot a Kaplan-Meier curve for the full training sample
 surv_fit1 <- survival::survfit(survival::Surv(time, status) ~ 1, data = train)
 survminer::ggsurvplot(surv_fit1, data = train, surv.median.line = "h", risk.table = TRUE, ggtheme = theme_bw())
-
 ```
 
 The above plot shows the training sample's median survival, or the timepoint at which survival probability reached 50%, was a bit under 50 months post-diagnosis. From there, survival probability marginally decreased and then plateaued at longer durations of time.
@@ -102,7 +101,6 @@ surv_plots <- lapply(cat_vars, function(x) {
 
 # Arrange the Kaplan-Meier plots on a 2 x 2 grid
 survminer::arrange_ggsurvplots(surv_plots, ncol = 2, nrow = 2)
-
 ```
 
 
@@ -113,7 +111,6 @@ Based on visual inspection, `sex` and `loc` (location of brain cancer) may have 
 We now turn to the two continuous variables in the data -- `ki` (Karnofsky index) and `gtv` (gross tumor volume, in cubic centimeters). For those that died, we create scatter plots with observation time on the y axes. Including only those that died will allow us to remove censoring as an issue.
 
 ```{r cont_plots, fig.width = 8, fig.height = 4}
-
 # Scatter plot of survival time over ki values
 ki_plot <- ggplot(train[train$status == 1,], aes(x = ki, y = time)) +
   geom_point() +
@@ -134,7 +131,6 @@ gtv_plot <- ggplot(train[train$status == 1,], aes(x = gtv, y = time)) +
   geom_smooth(method = 'lm', se = FALSE)
 
 gridExtra::grid.arrange(grobs = list(ki_plot, gtv_plot), nrow = 1, ncol = 2)
-
 ```
 
 The above charts suggest that survival time tended to be somewhat *higher* for higher Karnofsky index values, and tended to be somewhat *lower* for higher gross tumor volumes.
@@ -159,7 +155,6 @@ table <- broom::tidy(model, conf.int = TRUE, exponentiate = TRUE)[c("term", "est
 knitr::kable(table, col.names = c("Indicator", "HR", "HR (Low)", "HR (High)", "p-value")) %>% 
   kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
   kableExtra::row_spec(row = c(2, 3, 6, 7), bold = TRUE)
-
 ```
 
 The model results show that, all other variables in the model held equal:

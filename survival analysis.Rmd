@@ -17,7 +17,7 @@ This analysis uses the `BrainCancer` dataset from the `ISLR2` R package to perfo
 
 ### Set up and data import
 
-First, we load the libraries and data that will be used in this script. We also set aside a roughly 10% random sample of the dataset to use for testing the predictive accuracy of the Cox proportional-hazards model we will build toward the end of the analysis.
+First, we load the libraries and data that will be used in this script. We also set aside a roughly 10% random sample of the dataset to use for testing the predictive accuracy of the [Cox proportional-hazards regression model](https://sphweb.bumc.bu.edu/otlt/MPH-Modules/BS/BS704_Survival/BS704_Survival6.html) we will build toward the end of the analysis.
 
 ```{r settings, include = FALSE}
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
@@ -27,7 +27,6 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 # Load libraries
 library(ISLR2)
 library(tidyverse)
-library(GGally)
 library(survival)
 library(survminer)
 
@@ -55,6 +54,18 @@ str(train)
 # Variable summary statistics
 summary(train)
 ```
+
+The summary statistics show us that:
+
+- The modal `sex` (binary biological sex of the observation) is female (42/79, or 53%).
+- The modal `diagnosis` (type of brain cancer diagnosis received) is [Meningioma](https://braintumor.org/brain-tumor-information/brain-tumor-glossary/?gclid=Cj0KCQiAhf2MBhDNARIsAKXU5GQaT6n9tusZiDQszt64wEeQ2oPlOVWVK6-QLsSn9-8aKaR8jCB3WOUaAhHlEALw_wcB) (38/79, or 49%).
+- The modal `loc` (location of the tumor within the brain) is [supratentorial](https://www.ncbi.nlm.nih.gov/books/NBK65903/figure/CDR0000574573__205/) (62/79, or 78%).
+- The mean and median of `ki` ([Karnofsky index](https://www.sciencedirect.com/topics/medicine-and-dentistry/karnofsky-performance-status)) is about 81 and 80, respectively. The closeness of the mean and median suggests the distribution is not heavily skewed.
+- The mean and median of `gtv` (gross tumor volume, in cubic centimeters) is about 9 and 7, respectively. The mean being higher than the median suggests the distribution is somewhat right skewed.
+- The modal `stereo` (type of [stereotactic radiation](http://www.theangelesclinic.org/Home/PatientEducationLibrary/tabid/19283/ctl/View/mid/35200/Default.aspx?ContentPubID=426#:~:text=SRS%20involves%20a%20single%20radiation,performed%20on%20an%20outpatient%20basis.) received) is SRT (57/79, or 72%).
+- As shown by the mean of `status` (binary indicator for patient death by end of study period), about 39% of the training observations died by the end of the study period. The remaining 61% were censored, meaning they either dropped out before the study period ended or were alive at the end of the study period.
+- The mean and median of `time` (survival/observation time) is about 27 and 24 months, respectively. There may be slight right skew in this variable's distribution.
+
 
 For another look, we examine the first six observations of the training data using the `head` function.
 
@@ -95,7 +106,7 @@ survminer::arrange_ggsurvplots(surv_plots, ncol = 2, nrow = 2)
 ```
 
 
-From the plots above, we see that `diagnosis` (type of brain cancer diagnoses) and `stereo` (type of stereotactic radiation received) had the most significant relationships with survival time. Among the types of diagnoses in this dataset, HG glioma was the most lethal. Of the two stereotactic radiation types, receiving SRT (i.e., stereotactic radiotherapy) was related to shorter survival time.
+From the plots above, we see that `diagnosis` (type of brain cancer diagnosis) and `stereo` (type of stereotactic radiation received) had the most significant relationships with survival time. Among the types of diagnoses in this dataset, HG glioma was the most lethal. Of the two stereotactic radiation types, receiving SRT (i.e., stereotactic radiotherapy) was related to shorter survival time.
 
 Based on visual inspection, `sex` and `loc` (location of brain cancer) may impact risk of death. However, the p-values for both were greater than 0.05. This means we cannot reject the null hypothesis and we we cannot say with at least 95% confidence that either variable likely has a true relationship with survival time. These failures to reject the null hypothesis could be a function of lack of statistical power driven by small sample size. It is possible that, given a larger dataset drawn from the same population and context, we would have observed statistically significant relationships for these variables.
 
@@ -172,10 +183,14 @@ survival::concordance(model)
 survival::concordance(model, newdata = test)
 ```
 
-These results are not impressive. The concordance value can be interpreted as such: the Cox model can predict with about 47% accuracy which participant will die first, given two random observations from the test set. This means our model, while useful for inference, would be inappropriate for predictions with new, unseen data. To improve the predictive accuracy of the model, more complex methods with lower bias could be used. As well, the model would almost certainly be improved with more training data and the inclusion of any additional explanatory variables that are related to risk of death over time.
+While the model performs well on the training data used to build the model ([concordance](https://www.sciencedirect.com/science/article/pii/S1532046420301246) of about 83%), the more important measure in terms of generalizability is it's performance on the testing data. Fitting and evaluating the model on the testing data allows us to estimate how well the model fits new, unseen data.
+
+These results are not impressive. The concordance value can be interpreted as such: the Cox model can predict with about 47% accuracy which participant will die first, given two random observations from the test set. This means our model, while useful for inference, would be inappropriate for predictions with new, unseen data. To improve the predictive accuracy of the model, more complex methods with lower bias could be used. As well, the model would almost certainly be improved with more training data and the inclusion of any additional explanatory variables that are related to risk of death over time in the case of brain cancer.
 
 ### Conclusion
 
-This analysis shed light on factors that may be related to risk of death over time after a brain cancer diagnosis. Specifically, diagnoses of LG and HG glioma, as well as having tumors with larger gross volume, may increase risk of death over time. In contrast, higher values on the Karnofsky index may reduce risk of death over time. 
+This analysis shed light on factors that may be related to risk of death over time after a brain cancer diagnosis. Specifically, diagnoses of LG and HG glioma, as well as having tumors with larger gross volume, may increase risk of death over time. In contrast, higher values on the Karnofsky index may reduce risk of death over time.
+
+The practical implications of these findings are that those with high- and low-grade (HG and LG, respectively) gliomas are likely to die sooner than those with other types of brain tumors (the comparison for both was with Meningioma, in this case). As well, those with larger gross tumor volumes are likely to die sooner in comparison with those with lower gross tumor volumes. Higher scores of the Karnofsky index suggest a patient may live longer in comparison with those that have lower scores on the Karnofsky index.
 
 While the datasets used for training and testing were both small, the Cox proportional-hazards model that was developed did not generalize well to the testing set. Future analyses should seek to improve model fit through the use of larger training datasets, additional relevant variables, and potentially more complex models with lower bias.

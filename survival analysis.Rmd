@@ -84,7 +84,7 @@ summary(df_imputed)
 The ouput show us that:
 
 - The modal `sex` (binary biological sex of the observation) was female (45/88, or 51%).
-- The modal `diagnosis` (type of brain cancer diagnosis received) was [Meningioma](https://braintumor.org/brain-tumor-information/brain-tumor-glossary/?gclid=Cj0KCQiAhf2MBhDNARIsAKXU5GQaT6n9tusZiDQszt64wEeQ2oPlOVWVK6-QLsSn9-8aKaR8jCB3WOUaAhHlEALw_wcB) (43/88, or 49%).
+- The modal `diagnosis` (type of brain cancer diagnosis received) was [meningioma](https://braintumor.org/brain-tumor-information/brain-tumor-glossary/?gclid=Cj0KCQiAhf2MBhDNARIsAKXU5GQaT6n9tusZiDQszt64wEeQ2oPlOVWVK6-QLsSn9-8aKaR8jCB3WOUaAhHlEALw_wcB) (43/88, or 49%).
 - The modal `loc` (location of the tumor within the brain) was [supratentorial](https://www.ncbi.nlm.nih.gov/books/NBK65903/figure/CDR0000574573__205/) (69/88, or 78%).
 - The mean and median of `ki` ([Karnofsky index](https://www.sciencedirect.com/topics/medicine-and-dentistry/karnofsky-performance-status)) was about 81 and 80, respectively. The closeness of the mean and median suggests the distribution is likely symmetric.
 - The mean and median of `gtv` (gross tumor volume, in cubic centimeters) was about 9 and 7, respectively. The larger mean in comparison with the median suggests the distribution may have right skew.
@@ -103,7 +103,7 @@ survminer::ggsurvplot(surv_fit1, data = df_imputed, surv.median.line = "h", risk
 
 The above plot shows the sample's median survival time, or the time point at which survival probability reached 50%, was a bit under 50 months post-diagnosis. From there, survival probability marginally decreased and then plateaued at longer durations.
 
-While informative, we are really interested in how the explanatory variables may have impacted survival probability. To do that, we fit a Kaplan-Meier curve for each of the categorical predictors (i.e., `sex`, `diagnosis`, `loc`, and `stereo`.) We fit plots for the continuous variables in a later step. 
+While informative, we really want to understand how the explanatory variables may have impacted survival probability. To do that, we fit a Kaplan-Meier curve for each of the categorical predictors (i.e., `sex`, `diagnosis`, `loc`, and `stereo`.) We fit plots for the continuous variables in a later step. 
 
 
 ```{r km2, fig.width = 12, fig.height = 12}
@@ -123,7 +123,7 @@ survminer::arrange_ggsurvplots(surv_plots, ncol = 2, nrow = 2)
 ```
 
 
-From the plots above, we see that `diagnosis` (type of brain cancer diagnosis) and `stereo` (type of stereotactic radiation received) had statistically significant relationships with survival at the 95% confidence level. Among the types of diagnoses in this dataset, HG glioma appeared to be the most lethal. Of the two stereotactic radiation types, receiving SRT (i.e., stereotactic radiotherapy) was related to lower probability of survival over time.
+From the plots above, we see that `diagnosis` (type of brain cancer diagnosis) and `stereo` (type of stereotactic radiation received) had statistically significant relationships with survival at the 95% confidence level. Among the types of diagnoses in this dataset, high-grade (HG) glioma appeared to be the most lethal. Of the two stereotactic radiation types, receiving SRT (i.e., stereotactic radiotherapy) was related to lower probability of survival over time.
 
 Based on visual inspection, `sex` and `loc` (location of brain cancer) may have been related to survival. However, the p-values for both were greater than 0.05. This means we cannot reject the null hypothesis and we cannot say with at least 95% confidence that either variable likely had a true relationship with survival. These failures to reject the null hypothesis could be a function of lack of statistical power driven by small sample size. It is possible that, given a larger dataset drawn from the same population and context, we would have observed statistically significant relationships for these variables.
 
@@ -189,7 +189,7 @@ knitr::kable(table, col.names = c("Indicator", "HR", "HR (Low)", "HR (High)", "p
 
 The model results show that, all other variables in the model held equal:
 
-- Having an **HG glioma** diagnosis was associated with about **8 times greater risk of death** in comparison with a diagnosis a Meningioma.
+- Having a **high-grade glioma** diagnosis was associated with about **8 times greater risk of death** in comparison with a diagnosis a meningioma.
 - Each one-unit score increase on the **Karnofsky index** was associated with a **5% reduction in the risk of death**.
 
 *Note: risk of death refers to the risk of death at any given time point during the study period. Cox models assume that the relative differences in risk between groups remain constant throughout the entire time period of the study.*
@@ -206,14 +206,14 @@ survival::concordance(model)
 survival::concordance(model, newdata = test)
 ```
 
-While the model performs relatively well on the training data used to build the model ([concordance](https://www.sciencedirect.com/science/article/pii/S1532046420301246) of about 79%), the more important measure in terms of generalizability is its performance on the testing data. Fitting and evaluating the model on the testing data allows us to estimate how well the model fits new, unseen data.
+While the model performs relatively well on the training data used to build the model ([concordance](https://www.sciencedirect.com/science/article/pii/S1532046420301246) of about 79%), the more important measure in terms of generalizability is its performance on the testing data. Evaluating the model with the testing data allows us to estimate how well the model fits new, unseen data.
 
-The test data concordance is about 81%, which is about the same and slightly better than the training data concordance. The concordance value can be interpreted as such: the Cox model can predict with about 81% accuracy which participant will die first when given two random observations from the test set. This suggests the model is well-specified and accurate, at least when applied to individuals similar in characteristics to those in the `BrainCancer` dataset. The similar training and testing concordance provides evidence that the model was not overfit to the training data and generalizes to new, unseen data.
+The testing data concordance is about 81%, which is about the same and slightly better than the training data concordance. The concordance value can be interpreted as such: when provided two random test-set observations, the Cox model can predict with about 81% accuracy which will die first. This suggests the model is well-specified and accurate, at least when applied to individuals similar in characteristics to those in the `BrainCancer` dataset. The similar training and testing concordance provides evidence that the model was not overfit to the training data and that it generalizes to new, unseen data.
 
 ### Conclusion
 
-This analysis shed light on factors that may be related to risk of death over time after a brain cancer diagnosis. Specifically, receiving a high-grade (HG) glioma diagnosis was related to increased risk of death over time in comparison with receiving a Meningioma diagnosis. In contrast, higher scores on the Karnofsky index were related to lower risk of death over time.
+This analysis shed light on factors that may be related to risk of death over time after a brain cancer diagnosis. Specifically, receiving a high-grade (HG) glioma diagnosis was related to increased risk of death over time in comparison with receiving a meningioma diagnosis. In contrast, higher scores on the Karnofsky index were related to lower risk of death over time.
 
-The practical implications of these findings are those with high-grade gliomas may be likely to die sooner than those with other types of brain cancer (particularly Meningiomas). As well, among individuals with brain cancer, those with higher Karnofsky index scores may tend to live longer than those with lower Karnofsky index scores.
+The practical implications of these findings are those with high-grade gliomas may be likely to die sooner than those with other types of brain cancer (particularly meningiomas). As well, among individuals with brain cancer, those with higher Karnofsky index scores may tend to live longer than those with lower Karnofsky index scores.
 
 It is important to note that this analysis cannot say anything with certainty about causal effects due to its observational design and relatively small sample size. The observed associations *could* be indicative of causal effects, but additional studies with experimental or quasi-experimental designs would be needed to establish causal relationships with greater certainty. Additional non-experimental observational studies with larger sample sizes would also aid in evaluating the associations found in this analysis.

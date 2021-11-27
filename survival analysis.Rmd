@@ -1,7 +1,6 @@
 ---
 title: "Brain Cancer Survival Analysis"
 author: "Alec Becker"
-date: "11/24/2021"
 output: 
   html_document:
     toc: true
@@ -9,82 +8,102 @@ output:
     theme: flatly
 ---
 
+`r Sys.Date()`
+
 ### Introduction
 
-This analysis uses the `BrainCancer` dataset from the `ISLR2` R package to perform survival analysis. The outcome of interest is survival time after receiving a brain cancer diagnosis.
+This analysis uses the `BrainCancer` dataset from the `ISLR2` R package to perform survival analysis. The outcome of interest is risk of death over time after receiving a brain cancer diagnosis.
 
 *Note: The ISLR2 package is available on CRAN: https://CRAN.R-project.org/package=ISLR2*
 
 ### Set up and data import
 
-First, we load the libraries and data that will be used in this script. We also set aside a roughly 10% random sample of the dataset to use for testing the predictive accuracy of the [Cox proportional-hazards regression model](https://sphweb.bumc.bu.edu/otlt/MPH-Modules/BS/BS704_Survival/BS704_Survival6.html) we will build toward the end of the analysis.
+First, we load the packages and data that will be used.
 
 ```{r settings, include = FALSE}
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 ```
 
-```{r libs}
+```{r libs_and_data}
 # Load libraries
 library(ISLR2)
 library(tidyverse)
 library(survival)
 library(survminer)
+library(missForest)
 
 # Call and rename dataset from ISLR2 package
 data(BrainCancer)
 df <- BrainCancer
-
-# Select an approximate 10% sample for the hold-out testing set
-set.seed(42)
-test_rows <- sample(nrow(df), round((nrow(df) * 10) / 100))
-
-train <- df[-test_rows,]
-test <- df[test_rows,]
 ```
 
+Next, we examine the structure of the data using the `str()` function and get a glimpse of the first few rows using the `head()` function.
+
+```{r examine_data}
+str(df)
+
+head(df)
+```
+
+From the `str()` output, we see the dataset contains 88 observations and 8 variables. The `head()` output helps us understand the data by showing the column names and some example rows.
+
+### Data preparation
+
+To check for missingness, we apply an anonymous function to obtain the total number of missing values in each column. `sapply()` handles applying the function to each column and returning the output in the simplest form possible -- in this case, a vector. 
+
+```{r miss_check}
+sapply(df, function(x) sum(is.na(x)))
+```
+
+We see the dataset's only missing value is in the `diagnosis` variable. We would likely be safe dropping this observation and proceeding with the 87 complete rows. It is unlikely that excluding one observation would introduce much bias in the analysis.
+
+However, we want to retain every observation possible because we are working with a small dataset. We want to maximize statistical power as well as the amount of data available to train and test a model. To keep this observation, we impute the missing value using a [random forest](https://link.springer.com/article/10.1007/s11749-016-0481-7) model. We use the `missForest` package to fit and evaluate a model, use that model to impute the missing value, then save the newly complete dataset in the `df_imputed` object. 
+
+```{r impute1, results = FALSE}
+set.seed(1) # We set a random seed for reproducibility because there is randomness in the random forest algorithm
+rf_imputation <- missForest::missForest(df)
+```
+
+```{r impute2}
+rf_imputation$OOBerror
+
+df_imputed <- rf_imputation$ximp
+```
+
+The `OOBerror` ([out-of-bag error](https://scikit-learn.org/stable/auto_examples/ensemble/plot_ensemble_oob.html)) of the model was a percent falsely classified (PFC) of about 11%. The model estimated its predictive error via [bootstrapping](https://www.mastersindatascience.org/learning/introduction-to-machine-learning-algorithms/bootstrapping/). Normalized [root mean squared error](https://www.sciencedirect.com/topics/engineering/root-mean-squared-error) (NRMSE) is not relevant in our case because the only variable with missing values, `diagnosis`, was nominal. The PFC of 11% tells us the model was about 89% accurate at predicting nominal variables. Given this relatively high accuracy, we trust the imputation of the missing `diagnosis` value to most likely match the truth and proceed in the analysis as if it was the true value.
 
 ### Exploratory data analysis
 
-Then, we explore the training data's structure using the `str` function and summary statistics with the `summary` function. We see it contains 8 variables and 79 observations.
+We now examine the complete dataset's summary statistics using the `summary()` function.
 
-```{r eda1}
-# Dataset structure
-str(train)
-
+```{r summary}
 # Variable summary statistics
-summary(train)
+summary(df_imputed)
 ```
 
-The summary statistics show us that:
+The ouput show us that:
 
-- The modal `sex` (binary biological sex of the observation) was female (42/79, or 53%).
-- The modal `diagnosis` (type of brain cancer diagnosis received) was [Meningioma](https://braintumor.org/brain-tumor-information/brain-tumor-glossary/?gclid=Cj0KCQiAhf2MBhDNARIsAKXU5GQaT6n9tusZiDQszt64wEeQ2oPlOVWVK6-QLsSn9-8aKaR8jCB3WOUaAhHlEALw_wcB) (38/79, or 49%).
-- The modal `loc` (location of the tumor within the brain) was [supratentorial](https://www.ncbi.nlm.nih.gov/books/NBK65903/figure/CDR0000574573__205/) (62/79, or 78%).
-- The mean and median of `ki` ([Karnofsky index](https://www.sciencedirect.com/topics/medicine-and-dentistry/karnofsky-performance-status)) was about 81 and 80, respectively. The closeness of the mean and median suggests the distribution is not heavily skewed.
-- The mean and median of `gtv` (gross tumor volume, in cubic centimeters) was about 9 and 7, respectively. The mean being higher than the median suggests the distribution is somewhat right skewed.
-- The modal `stereo` (type of [stereotactic radiation](http://www.theangelesclinic.org/Home/PatientEducationLibrary/tabid/19283/ctl/View/mid/35200/Default.aspx?ContentPubID=426#:~:text=SRS%20involves%20a%20single%20radiation,performed%20on%20an%20outpatient%20basis.) received) was SRT (57/79, or 72%).
-- As shown by the mean of `status` (binary indicator for patient death by end of study period), about 39% of the training observations died by the end of the study period. The remaining 61% were censored, meaning they either dropped out before the study period ended or were alive at the end of the study period.
+- The modal `sex` (binary biological sex of the observation) was female (45/88, or 51%).
+- The modal `diagnosis` (type of brain cancer diagnosis received) was [Meningioma](https://braintumor.org/brain-tumor-information/brain-tumor-glossary/?gclid=Cj0KCQiAhf2MBhDNARIsAKXU5GQaT6n9tusZiDQszt64wEeQ2oPlOVWVK6-QLsSn9-8aKaR8jCB3WOUaAhHlEALw_wcB) (43/88, or 49%).
+- The modal `loc` (location of the tumor within the brain) was [supratentorial](https://www.ncbi.nlm.nih.gov/books/NBK65903/figure/CDR0000574573__205/) (69/88, or 78%).
+- The mean and median of `ki` ([Karnofsky index](https://www.sciencedirect.com/topics/medicine-and-dentistry/karnofsky-performance-status)) was about 81 and 80, respectively. The closeness of the mean and median suggests the distribution is likely symmetric.
+- The mean and median of `gtv` (gross tumor volume, in cubic centimeters) was about 9 and 7, respectively. The larger mean in comparison with the median suggests the distribution may have right skew.
+- The modal `stereo` (type of [stereotactic radiation](http://www.theangelesclinic.org/Home/PatientEducationLibrary/tabid/19283/ctl/View/mid/35200/Default.aspx?ContentPubID=426#:~:text=SRS%20involves%20a%20single%20radiation,performed%20on%20an%20outpatient%20basis.) received) was SRT (65/88, or 74%).
+- As shown by the mean of `status` (binary indicator for patient death by end of study period), about 40% of the observations were known to have died during the study period. The remaining 60% were **censored**, meaning they either dropped out before the study period ended and could no longer be observed or were known to be alive at the end of the study period.
 - The mean and median of `time` (survival/observation time) was about 27 and 24 months, respectively. There may be slight right skew in this variable's distribution.
 
 
-To get a glimpse of the raw data, we examine the first six observations of the training data using the `head` function.
-
-```{r eda2}
-# Show first six rows of data
-head(train)
-```
-
-To explore how survival probability changes as a function of observation time in the training data, we fit a Kaplan-Meier curve. This method accounts for the censoring present in the data (indicated by `status` = 0). An observation is said to be censored if the participant either dropped out before the study period ended or did not have the event -- in this case, death -- by the time the study ended. Censored data require special handling because their true status is not known. 
+To explore how survival probability changed over time, we fit and plot a Kaplan-Meier curve using the `survival` and `survminer` packages. This method accounts for the censoring present in the data (indicated by `status` = 0). Censored observations require special handling because their survival time is unknown.
 
 ```{r km1}
 # Fit and plot a Kaplan-Meier curve for the full training sample
-surv_fit1 <- survival::survfit(survival::Surv(time, status) ~ 1, data = train)
-survminer::ggsurvplot(surv_fit1, data = train, surv.median.line = "h", risk.table = TRUE, ggtheme = theme_bw())
+surv_fit1 <- survival::survfit(survival::Surv(time, status) ~ 1, data = df_imputed)
+survminer::ggsurvplot(surv_fit1, data = df_imputed, surv.median.line = "h", risk.table = TRUE, ggtheme = theme_bw())
 ```
 
-The above plot shows the training sample's median survival, or the time point at which survival probability reached 50%, was a bit under 50 months post-diagnosis. From there, survival probability marginally decreased and then plateaued at longer durations of time.
+The above plot shows the sample's median survival time, or the time point at which survival probability reached 50%, was a bit under 50 months post-diagnosis. From there, survival probability marginally decreased and then plateaued at longer durations.
 
-While informative, we are really interested in how the explanatory variables in the dataset may have impacted survival probability. To do that, we fit a Kaplan-Meier curve for each of the categorical predictors (i.e., `sex`, `diagnosis`, `loc`, and `stereo`.) We will fit plots for the continuous variables in a later step. 
+While informative, we are really interested in how the explanatory variables may have impacted survival probability. To do that, we fit a Kaplan-Meier curve for each of the categorical predictors (i.e., `sex`, `diagnosis`, `loc`, and `stereo`.) We fit plots for the continuous variables in a later step. 
 
 
 ```{r km2, fig.width = 12, fig.height = 12}
@@ -94,8 +113,8 @@ cat_vars <- c("sex", "diagnosis", "loc", "stereo")
 # Create a list of Kaplan-Meier plots for each factor variable
 surv_plots <- lapply(cat_vars, function(x) {
   formula <- as.formula(paste0("survival::Surv(time, status) ~ ", x))
-  surv_fit <- survminer::surv_fit(formula, data = train)
-  survplot <- ggsurvplot(surv_fit, data = train, pval = TRUE, surv.median.line = "h", risk.table = TRUE, ggtheme = theme_bw()) +
+  surv_fit <- survminer::surv_fit(formula, data = df_imputed)
+  survplot <- ggsurvplot(surv_fit, data = df_imputed, pval = TRUE, surv.median.line = "h", risk.table = TRUE, ggtheme = theme_bw()) +
                guides(color = guide_legend(nrow = 2))
 })
 
@@ -104,15 +123,15 @@ survminer::arrange_ggsurvplots(surv_plots, ncol = 2, nrow = 2)
 ```
 
 
-From the plots above, we see that `diagnosis` (type of brain cancer diagnosis) and `stereo` (type of stereotactic radiation received) had the most statistically significant relationships with survival time. Among the types of diagnoses in this dataset, HG glioma was the most lethal. Of the two stereotactic radiation types, receiving SRT (i.e., stereotactic radiotherapy) was related to shorter survival time.
+From the plots above, we see that `diagnosis` (type of brain cancer diagnosis) and `stereo` (type of stereotactic radiation received) had statistically significant relationships with survival at the 95% confidence level. Among the types of diagnoses in this dataset, HG glioma appeared to be the most lethal. Of the two stereotactic radiation types, receiving SRT (i.e., stereotactic radiotherapy) was related to lower probability of survival over time.
 
-Based on visual inspection, `sex` and `loc` (location of brain cancer) may have been related to survival time. However, the p-values for both were greater than 0.05. This means we cannot reject the null hypothesis and we we cannot say with at least 95% confidence that either variable likely has a true relationship with survival time. These failures to reject the null hypothesis could be a function of lack of statistical power driven by small sample size. It is possible that, given a larger dataset drawn from the same population and context, we would have observed statistically significant relationships for these variables.
+Based on visual inspection, `sex` and `loc` (location of brain cancer) may have been related to survival. However, the p-values for both were greater than 0.05. This means we cannot reject the null hypothesis and we cannot say with at least 95% confidence that either variable likely had a true relationship with survival. These failures to reject the null hypothesis could be a function of lack of statistical power driven by small sample size. It is possible that, given a larger dataset drawn from the same population and context, we would have observed statistically significant relationships for these variables.
 
-We now turn to the two continuous variables in the data -- `ki` (Karnofsky index) and `gtv` (gross tumor volume, in cubic centimeters). For those that died, we create scatter plots with observation time on the y axes. Including only those that died will allow us to remove censoring as an issue.
+We now turn to the two continuous variables in the data -- `ki` (Karnofsky index) and `gtv` (gross tumor volume, in cubic centimeters). For those that died, we create scatter plots with observation time on the y axes. Including only those that died allows us to remove censoring as an issue.
 
 ```{r cont_plots, fig.width = 8, fig.height = 4}
 # Scatter plot of survival time over ki values
-ki_plot <- ggplot(train[train$status == 1,], aes(x = ki, y = time)) +
+ki_plot <- ggplot(df_imputed[df_imputed$status == 1,], aes(x = ki, y = time)) +
   geom_point() +
   theme_bw() +
   labs(
@@ -122,7 +141,7 @@ ki_plot <- ggplot(train[train$status == 1,], aes(x = ki, y = time)) +
 
 
 # Scatter plot of survival time over gtv values
-gtv_plot <- ggplot(train[train$status == 1,], aes(x = gtv, y = time)) +
+gtv_plot <- ggplot(df_imputed[df_imputed$status == 1,], aes(x = gtv, y = time)) +
   geom_point() +
   theme_bw() +
   labs(
@@ -133,12 +152,23 @@ gtv_plot <- ggplot(train[train$status == 1,], aes(x = gtv, y = time)) +
 gridExtra::grid.arrange(grobs = list(ki_plot, gtv_plot), nrow = 1, ncol = 2)
 ```
 
-The above charts suggest that survival time tended to be somewhat *higher* for higher Karnofsky index values, and tended to be somewhat *lower* for higher gross tumor volumes.
+The above charts suggest that survival time tended to be *longer* for those with higher Karnofsky index scores and tended to be *shorter* for those with larger gross tumor volumes.
 
 ### Model building
 
-We will now build a Cox proportional-hazards regression to model death risk over time as a function of our explanatory variables. This will allow us to obtain hazard ratios that will suggest the strength and direction of association that each variable had with time to death. In a later step, we will assess the accuracy of the model on the test set.
+We now build a [Cox proportional-hazards regression model](https://sphweb.bumc.bu.edu/otlt/MPH-Modules/BS/BS704_Survival/BS704_Survival6.html) to model death risk over time as a function of our explanatory variables. This allows us to obtain hazard ratios that suggest the strength and direction of association that each variable had with risk of death at any given time point during the observation period.
 
+We also divide the sample randomly using an approximate 80%/20% split. 80% are used to build the model, and the remaining 20% are used to assess the fit of the model. This step is important as it provides evidence for the model's validity and generalizability.
+
+
+```{r split}
+set.seed(1) # The sample function is (pseudo-)random, so we set a random seed for reproducibility.
+test_obs <- sample(nrow(df_imputed), round((nrow(df_imputed) * 20) / 100))
+train <- df_imputed[-test_obs,]
+test <- df_imputed[test_obs,]
+```
+
+We use the `survival` package to build the Cox model. We also create a tidy table of the model results using the `broom`, `kable`, and `kableExtra` packages.
 
 ```{r model}
 # Fit Cox model
@@ -154,40 +184,36 @@ table <- broom::tidy(model, conf.int = TRUE, exponentiate = TRUE)[c("term", "est
 # Beautify the table of model results
 knitr::kable(table, col.names = c("Indicator", "HR", "HR (Low)", "HR (High)", "p-value")) %>% 
   kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
-  kableExtra::row_spec(row = c(2, 3, 6, 7), bold = TRUE)
+  kableExtra::row_spec(row = c(3, 6), bold = TRUE)
 ```
 
 The model results show that, all other variables in the model held equal:
 
-- Having an **LG glioma** diagnosis was associated with about **5 times greater instantaneous risk of death** in comparison with a diagnosis a Meningioma.
-- Having an **HG glioma** diagnosis was associated with about **16 times greater instantaneous risk of death** in comparison with a diagnosis a Meningioma. 
-- Each one-unit increase in **Karnofsky index values** was associated with a **5% reduction in the instantaneous risk of death**.
-- Each one-unit increase in **gross tumor volume** was associated with a **6% increase in the instantaneous risk of death**.
+- Having an **HG glioma** diagnosis was associated with about **8 times greater risk of death** in comparison with a diagnosis a Meningioma.
+- Each one-unit score increase on the **Karnofsky index** was associated with a **5% reduction in the risk of death**.
 
-*Note: "instantaneous risk of death" refers to the risk of death at any given instant (i.e., time point). We can also refer to this as the hazard of death.*
+*Note: risk of death refers to the risk of death at any given time point during the study period. Cox models assume that the relative differences in risk between groups remain constant throughout the entire time period of the study.*
 
 ### Model evaluation
 
-Next, we will assess the predictive accuracy of our model via [Harell's concordance index](https://cran.r-project.org/web/packages/survival/vignettes/concordance.pdf). 
+Next, we assess the fit of the model via [Harell's concordance index](https://cran.r-project.org/web/packages/survival/vignettes/concordance.pdf). 
 
 ```{r validate}
-# Calculate concordance of the Cox model (fitted with the training data)
+# Calculate concordance of the Cox model on the training data
 survival::concordance(model)
 
-# Calculate concordance of the Cox model using the test data to assess model generalizability
+# Calculate concordance of the Cox model on the test data to assess model fit and generalizability
 survival::concordance(model, newdata = test)
 ```
 
-While the model performs well on the training data used to build the model ([concordance](https://www.sciencedirect.com/science/article/pii/S1532046420301246) of about 83%), the more important measure in terms of generalizability is its performance on the testing data. Fitting and evaluating the model on the testing data allows us to estimate how well the model fits new, unseen data.
+While the model performs relatively well on the training data used to build the model ([concordance](https://www.sciencedirect.com/science/article/pii/S1532046420301246) of about 79%), the more important measure in terms of generalizability is its performance on the testing data. Fitting and evaluating the model on the testing data allows us to estimate how well the model fits new, unseen data.
 
-The test-set results are not impressive. The concordance value can be interpreted as such: the Cox model can predict with about 47% accuracy which participant will die first, given two random observations from the test set. This means our model, while useful for inference, would be inappropriate for predictions with new, unseen data. The relatively high concordance on the training data in comparison with the much lower concordance on the testing data suggests that the model was overfit to the training data. To improve predictive accuracy on unseen data, regularization or other time-to-event model types could be attempted. As well, the model would likely be improved with more training observations.
+The test data concordance is about 81%, which is about the same and slightly better than the training data concordance. The concordance value can be interpreted as such: the Cox model can predict with about 81% accuracy which participant died first, given two random observations from the test set. This suggests the model is well-specified and accurate, at least when applied to individuals similar in characteristics to those in the `BrainCancer` dataset. The similar training and testing concordance provides evidence that the model was not overfit to the training data and generalizes to new, unseen data.
 
 ### Conclusion
 
-This analysis shed light on factors that may be related to risk of death over time after a brain cancer diagnosis. Specifically, diagnoses of LG and HG glioma, as well as having tumors with larger gross volume, were related to increased risk of death over time. In contrast, higher values on the Karnofsky index were related to lower risk of death over time.
+This analysis shed light on factors that may be related to risk of death over time after a brain cancer diagnosis. Specifically, receiving a high-grade (HG) glioma diagnosis was related to increased risk of death over time in comparison with receiving a Meningioma diagnosis. In contrast, higher scores on the Karnofsky index were related to lower risk of death over time.
 
-The practical implications of these findings are that those with high- and low-grade (HG and LG, respectively) gliomas may be likely to die sooner than those with other types of brain tumors (the comparison for both was with Meningioma in this case). As well, those with larger gross tumor volumes may be likely to die sooner in comparison with those with lower gross tumor volumes. Higher scores of the Karnofsky index suggest a patient may live longer in comparison with those that have lower scores on the Karnofsky index.
+The practical implications of these findings are those with high-grade gliomas may be likely to die sooner than those with other types of brain cancer (particularly Meningiomas). As well, among individuals with brain cancer, those with higher Karnofsky index scores may tend to live longer than those with lower Karnofsky index scores.
 
-It is important to note that this analysis cannot say anything with certainty about causal effects. The observed associations *could* be indicative of causal effects, but additional studies with experimental or quasi-experimental designs would be needed to establish causal relationships with greater certainty. We should be especially careful in interpreting the associations given that the model did not appear to generalize well.
-
-Future analyses should seek to improve predictive accuracy on unseen data through the use of larger training datasets, and potentially through the application of regularization or alternative model types for time-to-event analysis. 
+It is important to note that this analysis cannot say anything with certainty about causal effects due to its observational design and relatively small sample size. The observed associations *could* be indicative of causal effects, but additional studies with experimental or quasi-experimental designs would be needed to establish causal relationships with greater certainty. Additional non-experimental observational studies with larger sample sizes would also aid in evaluating the associations found in this analysis.

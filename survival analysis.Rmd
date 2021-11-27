@@ -70,7 +70,7 @@ rf_imputation$OOBerror
 df_imputed <- rf_imputation$ximp
 ```
 
-The `OOBerror` ([out-of-bag error](https://scikit-learn.org/stable/auto_examples/ensemble/plot_ensemble_oob.html)) of the model was a percent falsely classified (PFC) of about 11%. The model estimated its predictive error via [bootstrapping](https://www.mastersindatascience.org/learning/introduction-to-machine-learning-algorithms/bootstrapping/). Normalized [root mean squared error](https://www.sciencedirect.com/topics/engineering/root-mean-squared-error) (NRMSE) is not relevant in our case because the only variable with missing values, `diagnosis`, was nominal. The PFC of 11% tells us the model was about 89% accurate at predicting nominal variables. Given this relatively high accuracy, we trust the imputation of the missing `diagnosis` value to most likely match the truth and proceed in the analysis as if it was the true value.
+The `OOBerror` ([out-of-bag error](https://scikit-learn.org/stable/auto_examples/ensemble/plot_ensemble_oob.html)) of the model was a percent falsely classified (PFC) of about 11%. The reported normalized [root mean squared error](https://www.sciencedirect.com/topics/engineering/root-mean-squared-error) (NRMSE) is not relevant in our case because the only variable with missing values, `diagnosis`, was nominal. The PFC of 11% tells us the model was about 89% accurate at predicting nominal variables. Given this relatively high accuracy, we trust the imputation of the missing `diagnosis` value to most likely match the truth and proceed in the analysis as if it was the true value.
 
 ### Exploratory data analysis
 
@@ -208,7 +208,7 @@ survival::concordance(model, newdata = test)
 
 While the model performs relatively well on the training data used to build the model ([concordance](https://www.sciencedirect.com/science/article/pii/S1532046420301246) of about 79%), the more important measure in terms of generalizability is its performance on the testing data. Fitting and evaluating the model on the testing data allows us to estimate how well the model fits new, unseen data.
 
-The test data concordance is about 81%, which is about the same and slightly better than the training data concordance. The concordance value can be interpreted as such: the Cox model can predict with about 81% accuracy which participant died first, given two random observations from the test set. This suggests the model is well-specified and accurate, at least when applied to individuals similar in characteristics to those in the `BrainCancer` dataset. The similar training and testing concordance provides evidence that the model was not overfit to the training data and generalizes to new, unseen data.
+The test data concordance is about 81%, which is about the same and slightly better than the training data concordance. The concordance value can be interpreted as such: the Cox model can predict with about 81% accuracy which participant will die first when given two random observations from the test set. This suggests the model is well-specified and accurate, at least when applied to individuals similar in characteristics to those in the `BrainCancer` dataset. The similar training and testing concordance provides evidence that the model was not overfit to the training data and generalizes to new, unseen data.
 
 ### Conclusion
 

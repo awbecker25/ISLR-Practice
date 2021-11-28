@@ -1,12 +1,13 @@
 ---
 title: "Brain Cancer Survival Analysis"
 author: "Alec Becker"
-date: "`r Sys.Date()`"
 output:
   github_document:
     html_preview: false
 always_allow_html: true
 ---
+
+`r Sys.Date()`
 
 ### Introduction
 

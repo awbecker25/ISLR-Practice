@@ -1,14 +1,12 @@
 ---
 title: "Brain Cancer Survival Analysis"
 author: "Alec Becker"
-output: 
-  html_document:
-    toc: true
-    toc_float: true
-    theme: flatly
+date: "`r Sys.Date()`"
+output:
+  github_document:
+    html_preview: false
+always_allow_html: true
 ---
-
-`r Sys.Date()`
 
 ### Introduction
 
@@ -21,7 +19,7 @@ This analysis uses the `BrainCancer` dataset from the `ISLR2` R package to perfo
 First, we load the packages and data that will be used.
 
 ```{r settings, include = FALSE}
-knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, fig.align = "center")
 ```
 
 ```{r libs_and_data}
